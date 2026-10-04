@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.example.controlefinanceiro.app-mergeDebugResources-41:/values-v30/values-v30.xml",
+            "map": [
+                {
+                    "source": "/Users/ricardomiranda/.gradle/caches/9.0.0/transforms/b5c4e2dd45b517b3122833bb2f40631b/transformed/material3-release/res/values-v30/values-v30.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "72",
+                        "endOffsets": "123"
+                    }
+                }
+            ]
+        }
+    ]
+}
