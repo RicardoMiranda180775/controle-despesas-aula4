@@ -1,0 +1,9 @@
+# Gradle
+/.gradle/
+
+# Build outputs
+/build/
+**/build/
+
+# macOS
+.DS_Store
