@@ -1,3 +1,4 @@
+
 package com.example.controlefinanceiro.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -23,7 +24,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -32,33 +32,41 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.controlefinanceiro.model.Lancamento
 import com.example.controlefinanceiro.model.TipoLancamento
+import com.example.controlefinanceiro.viewmodel.ControleDespesasViewModel
 import java.text.NumberFormat
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ControleDespesasScreen() {
-    // "var" é usado porque o usuário pode alterar estes valores.
-    // remember mantém o valor enquanto esta tela estiver na composição.
-    // mutableStateOf avisa o Compose para redesenhar a tela quando o valor mudar.
+fun ControleDespesasScreen(
+    viewModel: ControleDespesasViewModel = viewModel()
+) {
+    // Os dados do formulário continuam locais à tela.
     var data by remember { mutableStateOf("") }
     var valorTexto by remember { mutableStateOf("") }
-    var tipoSelecionado by remember { mutableStateOf(TipoLancamento.SAIDA) }
-//    var saldo by remember { mutableStateOf("") }
+    var tipoSelecionado by remember {
+        mutableStateOf(TipoLancamento.SAIDA)
+    }
 
-    // Lista observável: quando adicionamos um item, o Compose atualiza a LazyColumn.
-    // Os dados existem apenas enquanto o app estiver aberto; ainda não usamos banco de dados.
-    val lancamentos = remember { mutableStateListOf<Lancamento>() }
-    val saldo = calculaSaldo(lancamentos)
-
+    // A tela observa o estado disponibilizado pelo ViewModel.
+    // Quando ele muda, o Compose atualiza a interface.
+    val estado by viewModel.uiState
+    val lancamentos = estado.lancamentos
+    val saldo = estado.saldo
 
     Scaffold(
-        // Scaffold organiza estruturas comuns de uma tela, como barra superior e conteúdo.
-        topBar = { TopAppBar(title = { Text("Controle de despesas") }) }
+        // Scaffold organiza estruturas comuns da tela.
+        topBar = {
+            TopAppBar(
+                title = { Text("Controle de despesas") }
+            )
+        }
     ) { paddingValues ->
-        // LazyColumn mostra uma lista vertical e cria na tela apenas os itens necessários.
+
+        // LazyColumn mostra uma lista vertical de itens.
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -68,11 +76,14 @@ fun ControleDespesasScreen() {
         ) {
             item {
                 Spacer(Modifier.height(8.dp))
-                Text("Novo lançamento", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "Novo lançamento",
+                    style = MaterialTheme.typography.titleLarge
+                )
             }
 
             item {
-                // O campo guarda texto; a conversão para número acontece ao adicionar o lançamento.
+                // O campo guarda a data digitada pelo usuário.
                 OutlinedTextField(
                     value = data,
                     onValueChange = { data = it },
@@ -83,49 +94,68 @@ fun ControleDespesasScreen() {
             }
 
             item {
+                // O valor permanece como texto até ser convertido.
                 OutlinedTextField(
                     value = valorTexto,
                     onValueChange = { valorTexto = it },
                     label = { Text("Valor") },
                     prefix = { Text("R$ ") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal
+                    ),
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
             }
 
             item {
-                Text("Tipo", style = MaterialTheme.typography.labelLarge)
-                Row(modifier = Modifier.padding(top = 8.dp)) {
+                Text(
+                    "Tipo",
+                    style = MaterialTheme.typography.labelLarge
+                )
+
+                Row(
+                    modifier = Modifier.padding(top = 8.dp)
+                ) {
                     TipoButton(
                         texto = "Entrada",
-                        selecionado = tipoSelecionado == TipoLancamento.ENTRADA,
-                        aoClicar = { tipoSelecionado = TipoLancamento.ENTRADA }
+                        selecionado =
+                            tipoSelecionado == TipoLancamento.ENTRADA,
+                        aoClicar = {
+                            tipoSelecionado = TipoLancamento.ENTRADA
+                        }
                     )
+
                     Spacer(Modifier.width(8.dp))
+
                     TipoButton(
                         texto = "Saída",
-                        selecionado = tipoSelecionado == TipoLancamento.SAIDA,
-                        aoClicar = { tipoSelecionado = TipoLancamento.SAIDA }
+                        selecionado =
+                            tipoSelecionado == TipoLancamento.SAIDA,
+                        aoClicar = {
+                            tipoSelecionado = TipoLancamento.SAIDA
+                        }
                     )
                 }
             }
 
             item {
-                // Só permite adicionar quando há data e o valor digitado pode virar Double.
+                // Só permite adicionar quando há data e valor válido.
                 Button(
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = data.isNotBlank() && valorComoDouble(valorTexto) != null,
+                    enabled = data.isNotBlank() &&
+                            valorComoDouble(valorTexto) != null,
                     onClick = {
-                        // Cria um objeto Lancamento com os valores atuais do formulário.
-                        lancamentos.add(
+                        // A tela delega o cadastro ao ViewModel.
+                        viewModel.adicionarLancamento(
                             Lancamento(
                                 data = data,
                                 valor = valorComoDouble(valorTexto)!!,
                                 tipo = tipoSelecionado
                             )
                         )
-                        // Limpa o campo para preparar o próximo cadastro.
+
+                        // Limpa o valor para o próximo cadastro.
                         valorTexto = ""
                     }
                 ) {
@@ -141,7 +171,6 @@ fun ControleDespesasScreen() {
                 )
             }
 
-
             item {
                 Text(
                     text = "Lançamentos recentes",
@@ -151,9 +180,11 @@ fun ControleDespesasScreen() {
             }
 
             if (lancamentos.isEmpty()) {
-                item { Text("Nenhum lançamento adicionado ainda.") }
+                item {
+                    Text("Nenhum lançamento adicionado ainda.")
+                }
             } else {
-                // reversed mostra o lançamento mais recente no topo da lista.
+                // O lançamento mais recente aparece primeiro.
                 items(lancamentos.reversed()) { lancamento ->
                     LancamentoItem(lancamento)
                 }
@@ -162,31 +193,48 @@ fun ControleDespesasScreen() {
     }
 }
 
-// Aceita vírgula ou ponto decimal, pois o usuário brasileiro costuma digitar "10,50".
+// Aceita vírgula ou ponto como separador decimal.
 private fun valorComoDouble(texto: String): Double? =
     texto.replace(',', '.').toDoubleOrNull()
 
 @Composable
-private fun TipoButton(texto: String, selecionado: Boolean, aoClicar: () -> Unit) {
-    // O botão selecionado tem preenchimento; o outro fica apenas contornado.
+private fun TipoButton(
+    texto: String,
+    selecionado: Boolean,
+    aoClicar: () -> Unit
+) {
+    // O tipo selecionado tem preenchimento.
     if (selecionado) {
-        Button(onClick = aoClicar) { Text(texto) }
+        Button(onClick = aoClicar) {
+            Text(texto)
+        }
     } else {
-        OutlinedButton(onClick = aoClicar) { Text(texto) }
+        OutlinedButton(onClick = aoClicar) {
+            Text(texto)
+        }
     }
 }
 
 @Composable
 private fun LancamentoItem(lancamento: Lancamento) {
-    // A aparência do item muda de acordo com seu tipo.
+    // A aparência muda conforme o tipo do lançamento.
     val ehEntrada = lancamento.tipo == TipoLancamento.ENTRADA
-    val cor = if (ehEntrada) Color(0xFF1B5E20) else MaterialTheme.colorScheme.error
-    val sinal = if (ehEntrada) "+" else "-"
-    // Formata o Double no padrão brasileiro, por exemplo: R$ 10,50.
-    val valorFormatado = NumberFormat.getCurrencyInstance(Locale("pt", "BR"))
-        .format(lancamento.valor)
+    val cor = if (ehEntrada) {
+        Color(0xFF1B5E20)
+    } else {
+        MaterialTheme.colorScheme.error
+    }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    val sinal = if (ehEntrada) "+" else "-"
+
+    // Formata o valor no padrão monetário brasileiro.
+    val valorFormatado =
+        NumberFormat.getCurrencyInstance(Locale("pt", "BR"))
+            .format(lancamento.valor)
+
+    Card(
+        modifier = Modifier.fillMaxWidth()
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -200,6 +248,7 @@ private fun LancamentoItem(lancamento: Lancamento) {
                     style = MaterialTheme.typography.bodySmall
                 )
             }
+
             Text(
                 text = "$sinal $valorFormatado",
                 color = cor,
@@ -208,14 +257,3 @@ private fun LancamentoItem(lancamento: Lancamento) {
         }
     }
 }
-
-fun calculaSaldo(lancamento: List<Lancamento>): Double{
-    return lancamento.sumOf {
-        if (it.tipo == TipoLancamento.ENTRADA){
-            it.valor
-        } else {
-            -it.valor
-        }
-    }
-}
-
