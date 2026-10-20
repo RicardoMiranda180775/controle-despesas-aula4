@@ -26,13 +26,24 @@ class ControleDespesasViewModel(
     val uiState: State<ControleDespesasUiState> = _uiState
 
     fun adicionarLancamento(lancamento: Lancamento) {
-        // O Repository passa a gerenciar a inclusão do lançamento.
         val lancamentosAtualizados = repository.adicionar(lancamento)
 
-        // A ViewModel atualiza o estado que a interface observa.
+        atualizarEstado(lancamentosAtualizados)
+    }
+
+    fun atualizarLancamento(lancamento: Lancamento) {
+        // Solicita ao Repository a atualização do registro.
+        val lancamentosAtualizados = repository.atualizar(lancamento)
+            ?: return
+
+        // Atualiza a lista e recalcula o saldo.
+        atualizarEstado(lancamentosAtualizados)
+    }
+
+    private fun atualizarEstado(lancamentos: List<Lancamento>) {
         _uiState.value = ControleDespesasUiState(
-            lancamentos = lancamentosAtualizados,
-            saldo = calcularSaldo(lancamentosAtualizados)
+            lancamentos = lancamentos,
+            saldo = calcularSaldo(lancamentos)
         )
     }
 

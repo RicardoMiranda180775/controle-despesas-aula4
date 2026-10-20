@@ -44,21 +44,39 @@ import java.util.Locale
 fun ControleDespesasScreen(
     viewModel: ControleDespesasViewModel = viewModel()
 ) {
-    // Os dados do formulário continuam locais à tela.
     var data by remember { mutableStateOf("") }
     var valorTexto by remember { mutableStateOf("") }
     var tipoSelecionado by remember {
         mutableStateOf(TipoLancamento.SAIDA)
     }
 
-    // A tela observa o estado disponibilizado pelo ViewModel.
-    // Quando ele muda, o Compose atualiza a interface.
+    // Guarda o lançamento que está sendo editado.
+    var lancamentoEmEdicao by remember {
+        mutableStateOf<Lancamento?>(null)
+    }
+
+    // A tela observa o estado publicado pela ViewModel.
     val estado by viewModel.uiState
     val lancamentos = estado.lancamentos
     val saldo = estado.saldo
 
+    // Prepara o formulário para editar um lançamento existente.
+    fun iniciarEdicao(lancamento: Lancamento) {
+        lancamentoEmEdicao = lancamento
+        data = lancamento.data
+        valorTexto = lancamento.valor.toString()
+        tipoSelecionado = lancamento.tipo
+    }
+
+    // Limpa o formulário e sai do modo de edição.
+    fun cancelarEdicao() {
+        lancamentoEmEdicao = null
+        data = ""
+        valorTexto = ""
+        tipoSelecionado = TipoLancamento.SAIDA
+    }
+
     Scaffold(
-        // Scaffold organiza estruturas comuns da tela.
         topBar = {
             TopAppBar(
                 title = { Text("Controle de despesas") }
@@ -66,7 +84,6 @@ fun ControleDespesasScreen(
         }
     ) { paddingValues ->
 
-        // LazyColumn mostra uma lista vertical de itens.
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -76,14 +93,18 @@ fun ControleDespesasScreen(
         ) {
             item {
                 Spacer(Modifier.height(8.dp))
+
                 Text(
-                    "Novo lançamento",
+                    text = if (lancamentoEmEdicao == null) {
+                        "Novo lançamento"
+                    } else {
+                        "Editar lançamento"
+                    },
                     style = MaterialTheme.typography.titleLarge
                 )
             }
 
             item {
-                // O campo guarda a data digitada pelo usuário.
                 OutlinedTextField(
                     value = data,
                     onValueChange = { data = it },
@@ -94,7 +115,6 @@ fun ControleDespesasScreen(
             }
 
             item {
-                // O valor permanece como texto até ser convertido.
                 OutlinedTextField(
                     value = valorTexto,
                     onValueChange = { valorTexto = it },
@@ -110,7 +130,7 @@ fun ControleDespesasScreen(
 
             item {
                 Text(
-                    "Tipo",
+                    text = "Tipo",
                     style = MaterialTheme.typography.labelLarge
                 )
 
@@ -140,26 +160,56 @@ fun ControleDespesasScreen(
             }
 
             item {
-                // Só permite adicionar quando há data e valor válido.
                 Button(
                     modifier = Modifier.fillMaxWidth(),
                     enabled = data.isNotBlank() &&
-                            valorComoDouble(valorTexto) != null,
+                            (valorComoDouble(valorTexto)?.let {
+                                it > 0.0
+                            } == true),
                     onClick = {
-                        // A tela delega o cadastro ao ViewModel.
-                        viewModel.adicionarLancamento(
-                            Lancamento(
-                                data = data,
-                                valor = valorComoDouble(valorTexto)!!,
-                                tipo = tipoSelecionado
-                            )
-                        )
+                        val valor = valorComoDouble(valorTexto) ?: return@Button
 
-                        // Limpa o valor para o próximo cadastro.
-                        valorTexto = ""
+                        val lancamentoOriginal = lancamentoEmEdicao
+
+                        if (lancamentoOriginal == null) {
+                            // Cadastro de um novo lançamento.
+                            viewModel.adicionarLancamento(
+                                Lancamento(
+                                    data = data,
+                                    valor = valor,
+                                    tipo = tipoSelecionado
+                                )
+                            )
+                        } else {
+                            // Mantém o ID original durante a edição.
+                            viewModel.atualizarLancamento(
+                                lancamentoOriginal.copy(
+                                    data = data,
+                                    valor = valor,
+                                    tipo = tipoSelecionado
+                                )
+                            )
+                        }
+
+                        cancelarEdicao()
                     }
                 ) {
-                    Text("Adicionar lançamento")
+                    Text(
+                        text = if (lancamentoEmEdicao == null) {
+                            "Adicionar lançamento"
+                        } else {
+                            "Salvar alterações"
+                        }
+                    )
+                }
+
+                if (lancamentoEmEdicao != null) {
+                    OutlinedButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { cancelarEdicao() }
+                    ) {
+                        Text("Cancelar edição")
+                    }
                 }
             }
 
@@ -184,9 +234,14 @@ fun ControleDespesasScreen(
                     Text("Nenhum lançamento adicionado ainda.")
                 }
             } else {
-                // O lançamento mais recente aparece primeiro.
-                items(lancamentos.reversed()) { lancamento ->
-                    LancamentoItem(lancamento)
+                items(
+                    items = lancamentos.reversed(),
+                    key = { it.id }
+                ) { lancamento ->
+                    LancamentoItem(
+                        lancamento = lancamento,
+                        aoEditar = { iniciarEdicao(lancamento) }
+                    )
                 }
             }
         }
@@ -203,7 +258,6 @@ private fun TipoButton(
     selecionado: Boolean,
     aoClicar: () -> Unit
 ) {
-    // O tipo selecionado tem preenchimento.
     if (selecionado) {
         Button(onClick = aoClicar) {
             Text(texto)
@@ -216,9 +270,12 @@ private fun TipoButton(
 }
 
 @Composable
-private fun LancamentoItem(lancamento: Lancamento) {
-    // A aparência muda conforme o tipo do lançamento.
+private fun LancamentoItem(
+    lancamento: Lancamento,
+    aoEditar: () -> Unit
+) {
     val ehEntrada = lancamento.tipo == TipoLancamento.ENTRADA
+
     val cor = if (ehEntrada) {
         Color(0xFF1B5E20)
     } else {
@@ -226,8 +283,6 @@ private fun LancamentoItem(lancamento: Lancamento) {
     }
 
     val sinal = if (ehEntrada) "+" else "-"
-
-    // Formata o valor no padrão monetário brasileiro.
     val valorFormatado =
         NumberFormat.getCurrencyInstance(Locale("pt", "BR"))
             .format(lancamento.valor)
@@ -243,10 +298,17 @@ private fun LancamentoItem(lancamento: Lancamento) {
         ) {
             Column {
                 Text(lancamento.data)
+
                 Text(
                     text = if (ehEntrada) "Entrada" else "Saída",
                     style = MaterialTheme.typography.bodySmall
                 )
+
+                Spacer(Modifier.height(4.dp))
+
+                OutlinedButton(onClick = aoEditar) {
+                    Text("Editar")
+                }
             }
 
             Text(
