@@ -1,5 +1,7 @@
 package com.example.controlefinanceiro.model
 
+import java.util.UUID
+
 // Enum: restringe o tipo do lançamento às duas opções válidas do app.
 enum class TipoLancamento {
     ENTRADA,
@@ -14,5 +16,7 @@ data class Lancamento(
     // O valor é numérico para permitir cálculos, como a soma do saldo.
     val valor: Double,
     // O tipo usa o enum acima, evitando textos livres como "entrada" ou "Entrada".
-    val tipo: TipoLancamento
+    val tipo: TipoLancamento,
+    // Cada lançamento recebe um identificador único por padrão.
+    val id: String = UUID.randomUUID().toString()
 )
