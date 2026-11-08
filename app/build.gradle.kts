@@ -2,6 +2,9 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+
+    // Gera automaticamente o código necessário para o Room.
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -41,4 +44,13 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+
+    // Biblioteca do Room para trabalhar com o banco SQLite.
+    implementation(libs.androidx.room.runtime)
+
+    // Integração com Coroutines e Flow.
+    implementation(libs.androidx.room.ktx)
+
+    // Processador de código do Room.
+    ksp(libs.androidx.room.compiler)
 }
