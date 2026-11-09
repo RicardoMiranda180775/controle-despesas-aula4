@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -21,6 +22,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -54,6 +56,11 @@ fun ControleDespesasScreen(
     var lancamentoEmEdicao by remember {
         mutableStateOf<Lancamento?>(null)
     }
+
+    var lancamentoParaExcluir by remember {
+        mutableStateOf<Lancamento?>(null)
+    }
+    var confirmarExclusaoTodos by remember { mutableStateOf(false) }
 
     // A tela observa o estado publicado pela ViewModel.
     val estado by viewModel.uiState
@@ -235,10 +242,7 @@ fun ControleDespesasScreen(
 
                     if (lancamentos.isNotEmpty()) {
                         OutlinedButton(
-                            onClick = {
-                                viewModel.excluirTodosLancamentos()
-                                cancelarEdicao()
-                            }
+                            onClick = { confirmarExclusaoTodos = true }
                         ) {
                             Text("Excluir todos")
                         }
@@ -258,16 +262,63 @@ fun ControleDespesasScreen(
                     LancamentoItem(
                         lancamento = lancamento,
                         aoEditar = { iniciarEdicao(lancamento) },
-                        aoExcluir = {
-                            viewModel.excluirLancamento(lancamento.id)
-                            if (lancamentoEmEdicao?.id == lancamento.id) {
-                                cancelarEdicao()
-                            }
-                        }
+                        aoExcluir = { lancamentoParaExcluir = lancamento }
                     )
                 }
             }
         }
+    }
+
+    lancamentoParaExcluir?.let { lancamento ->
+        AlertDialog(
+            onDismissRequest = { lancamentoParaExcluir = null },
+            title = { Text("Excluir lançamento?") },
+            text = { Text("O lançamento será removido permanentemente.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.excluirLancamento(lancamento.id)
+                        if (lancamentoEmEdicao?.id == lancamento.id) {
+                            cancelarEdicao()
+                        }
+                        lancamentoParaExcluir = null
+                    }
+                ) {
+                    Text("Excluir")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { lancamentoParaExcluir = null }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    if (confirmarExclusaoTodos) {
+        AlertDialog(
+            onDismissRequest = { confirmarExclusaoTodos = false },
+            title = { Text("Excluir todos os lançamentos?") },
+            text = {
+                Text("Todos os lançamentos serão removidos permanentemente.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.excluirTodosLancamentos()
+                        cancelarEdicao()
+                        confirmarExclusaoTodos = false
+                    }
+                ) {
+                    Text("Excluir todos")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmarExclusaoTodos = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
     }
 }
 
