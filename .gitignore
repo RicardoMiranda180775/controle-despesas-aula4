@@ -5,5 +5,12 @@
 /build/
 **/build/
 
+# Android Studio
+.idea/
+*.iml
+
+# Android SDK local
+local.properties
+
 # macOS
 .DS_Store
