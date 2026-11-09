@@ -16,14 +16,20 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,16 +37,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.controlefinanceiro.R
 import com.example.controlefinanceiro.model.Lancamento
 import com.example.controlefinanceiro.model.TipoLancamento
 import com.example.controlefinanceiro.viewmodel.ControleDespesasViewModel
 import java.text.NumberFormat
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.time.format.ResolverStyle
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -63,11 +76,14 @@ fun ControleDespesasScreen(
         mutableStateOf<Lancamento?>(null)
     }
     var confirmarExclusaoTodos by remember { mutableStateOf(false) }
+    var mostrarCalendario by remember { mutableStateOf(false) }
 
     // A tela observa o estado publicado pela ViewModel.
     val estado by viewModel.uiState
     val lancamentos = estado.lancamentos
     val saldo = estado.saldo
+    val dataInformada = converterData(data.text)
+    val hoje = LocalDate.now()
 
     // Prepara o formulário para editar um lançamento existente.
     fun iniciarEdicao(lancamento: Lancamento) {
@@ -129,6 +145,14 @@ fun ControleDespesasScreen(
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Number
                     ),
+                    trailingIcon = {
+                        IconButton(onClick = { mostrarCalendario = true }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_calendar),
+                                contentDescription = "Selecionar data"
+                            )
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
@@ -182,7 +206,8 @@ fun ControleDespesasScreen(
             item {
                 Button(
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = data.text.length == 10 &&
+                    enabled = dataInformada != null &&
+                            !dataInformada.isAfter(hoje) &&
                             (valorComoDouble(valorTexto.text)?.let {
                                 it > 0.0
                             } == true),
@@ -334,7 +359,72 @@ fun ControleDespesasScreen(
             }
         )
     }
+
+    if (mostrarCalendario) {
+        val hojeUtcMillis = hoje.atStartOfDay(ZoneOffset.UTC)
+            .toInstant()
+            .toEpochMilli()
+        val dataSelecionadaMillis = dataInformada
+            ?.takeUnless { it.isAfter(hoje) }
+            ?.atStartOfDay(ZoneOffset.UTC)
+            ?.toInstant()
+            ?.toEpochMilli()
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = dataSelecionadaMillis,
+            initialDisplayedMonthMillis = dataSelecionadaMillis ?: hojeUtcMillis,
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    val data = Instant.ofEpochMilli(utcTimeMillis)
+                        .atZone(ZoneOffset.UTC)
+                        .toLocalDate()
+                    return !data.isAfter(hoje)
+                }
+
+                override fun isSelectableYear(year: Int): Boolean {
+                    return year <= hoje.year
+                }
+            }
+        )
+
+        DatePickerDialog(
+            onDismissRequest = { mostrarCalendario = false },
+            confirmButton = {
+                TextButton(
+                    enabled = datePickerState.selectedDateMillis != null,
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            val dataSelecionada = Instant.ofEpochMilli(millis)
+                                .atZone(ZoneOffset.UTC)
+                                .toLocalDate()
+                            val texto = dataSelecionada.format(formatoData)
+                            data = TextFieldValue(
+                                text = texto,
+                                selection = TextRange(texto.length)
+                            )
+                        }
+                        mostrarCalendario = false
+                    }
+                ) {
+                    Text("Confirmar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { mostrarCalendario = false }) {
+                    Text("Cancelar")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
 }
+
+private val formatoData = DateTimeFormatter
+    .ofPattern("dd/MM/uuuu")
+    .withResolverStyle(ResolverStyle.STRICT)
+
+private fun converterData(texto: String): LocalDate? =
+    runCatching { LocalDate.parse(texto, formatoData) }.getOrNull()
 
 // Formata a data conforme os dígitos são digitados.
 private fun formatarData(valor: TextFieldValue): TextFieldValue {
