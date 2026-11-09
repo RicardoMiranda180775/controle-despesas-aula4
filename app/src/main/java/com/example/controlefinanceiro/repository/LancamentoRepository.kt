@@ -32,6 +32,17 @@ class LancamentoRepository(
         return quantidadeAtualizada > 0
     }
 
+    // Exclui o registro identificado pelo ID.
+    // Retorna false se nenhum registro tiver sido excluído.
+    suspend fun excluirPorId(id: String): Boolean {
+        return lancamentoDao.excluirPorId(id) > 0
+    }
+
+    // Exclui todos os lançamentos do banco.
+    suspend fun excluirTodos() {
+        lancamentoDao.excluirTodos()
+    }
+
     // Converte o modelo da aplicação para a entidade do Room.
     private fun Lancamento.toEntity(): LancamentoEntity {
         return LancamentoEntity(

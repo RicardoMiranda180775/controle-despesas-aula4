@@ -82,6 +82,36 @@ class ControleDespesasViewModel(
         }
     }
 
+    fun excluirLancamento(id: String) {
+        viewModelScope.launch {
+            try {
+                val excluido = repository.excluirPorId(id)
+
+                if (!excluido) {
+                    _uiState.value = _uiState.value.copy(
+                        erro = "Lançamento não encontrado."
+                    )
+                }
+            } catch (erro: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    erro = erro.message ?: "Erro ao excluir lançamento."
+                )
+            }
+        }
+    }
+
+    fun excluirTodosLancamentos() {
+        viewModelScope.launch {
+            try {
+                repository.excluirTodos()
+            } catch (erro: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    erro = erro.message ?: "Erro ao excluir lançamentos."
+                )
+            }
+        }
+    }
+
     private fun calcularSaldo(lancamentos: List<Lancamento>): Double {
         return lancamentos.sumOf { lancamento ->
             if (lancamento.tipo == TipoLancamento.ENTRADA) {

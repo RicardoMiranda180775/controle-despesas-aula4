@@ -222,11 +222,28 @@ fun ControleDespesasScreen(
             }
 
             item {
-                Text(
-                    text = "Lançamentos recentes",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Lançamentos recentes",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
+                    if (lancamentos.isNotEmpty()) {
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.excluirTodosLancamentos()
+                                cancelarEdicao()
+                            }
+                        ) {
+                            Text("Excluir todos")
+                        }
+                    }
+                }
             }
 
             if (lancamentos.isEmpty()) {
@@ -240,7 +257,13 @@ fun ControleDespesasScreen(
                 ) { lancamento ->
                     LancamentoItem(
                         lancamento = lancamento,
-                        aoEditar = { iniciarEdicao(lancamento) }
+                        aoEditar = { iniciarEdicao(lancamento) },
+                        aoExcluir = {
+                            viewModel.excluirLancamento(lancamento.id)
+                            if (lancamentoEmEdicao?.id == lancamento.id) {
+                                cancelarEdicao()
+                            }
+                        }
                     )
                 }
             }
@@ -272,7 +295,8 @@ private fun TipoButton(
 @Composable
 private fun LancamentoItem(
     lancamento: Lancamento,
-    aoEditar: () -> Unit
+    aoEditar: () -> Unit,
+    aoExcluir: () -> Unit
 ) {
     val ehEntrada = lancamento.tipo == TipoLancamento.ENTRADA
 
@@ -306,8 +330,16 @@ private fun LancamentoItem(
 
                 Spacer(Modifier.height(4.dp))
 
-                OutlinedButton(onClick = aoEditar) {
-                    Text("Editar")
+                Row {
+                    OutlinedButton(onClick = aoEditar) {
+                        Text("Editar")
+                    }
+
+                    Spacer(Modifier.width(8.dp))
+
+                    OutlinedButton(onClick = aoExcluir) {
+                        Text("Excluir")
+                    }
                 }
             }
 
