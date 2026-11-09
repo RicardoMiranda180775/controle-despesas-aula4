@@ -31,6 +31,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -46,8 +48,8 @@ import java.util.Locale
 fun ControleDespesasScreen(
     viewModel: ControleDespesasViewModel = viewModel()
 ) {
-    var data by remember { mutableStateOf("") }
-    var valorTexto by remember { mutableStateOf("") }
+    var data by remember { mutableStateOf(TextFieldValue("")) }
+    var valorTexto by remember { mutableStateOf(TextFieldValue("")) }
     var tipoSelecionado by remember {
         mutableStateOf(TipoLancamento.SAIDA)
     }
@@ -70,16 +72,23 @@ fun ControleDespesasScreen(
     // Prepara o formulário para editar um lançamento existente.
     fun iniciarEdicao(lancamento: Lancamento) {
         lancamentoEmEdicao = lancamento
-        data = lancamento.data
-        valorTexto = lancamento.valor.toString()
+        data = TextFieldValue(
+            text = lancamento.data,
+            selection = TextRange(lancamento.data.length)
+        )
+        val valorFormatado = formatarValor(lancamento.valor)
+        valorTexto = TextFieldValue(
+            text = valorFormatado,
+            selection = TextRange(valorFormatado.length)
+        )
         tipoSelecionado = lancamento.tipo
     }
 
     // Limpa o formulário e sai do modo de edição.
     fun cancelarEdicao() {
         lancamentoEmEdicao = null
-        data = ""
-        valorTexto = ""
+        data = TextFieldValue("")
+        valorTexto = TextFieldValue("")
         tipoSelecionado = TipoLancamento.SAIDA
     }
 
@@ -114,8 +123,12 @@ fun ControleDespesasScreen(
             item {
                 OutlinedTextField(
                     value = data,
-                    onValueChange = { data = it },
+                    onValueChange = { data = formatarData(it) },
                     label = { Text("Data") },
+                    placeholder = { Text("dd/MM/aaaa") },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number
+                    ),
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
@@ -124,12 +137,12 @@ fun ControleDespesasScreen(
             item {
                 OutlinedTextField(
                     value = valorTexto,
-                    onValueChange = { valorTexto = it },
                     label = { Text("Valor") },
                     prefix = { Text("R$ ") },
                     keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Decimal
+                        keyboardType = KeyboardType.Number
                     ),
+                    onValueChange = { valorTexto = formatarValor(it) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
@@ -169,12 +182,13 @@ fun ControleDespesasScreen(
             item {
                 Button(
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = data.isNotBlank() &&
-                            (valorComoDouble(valorTexto)?.let {
+                    enabled = data.text.length == 10 &&
+                            (valorComoDouble(valorTexto.text)?.let {
                                 it > 0.0
                             } == true),
                     onClick = {
-                        val valor = valorComoDouble(valorTexto) ?: return@Button
+                        val valor = valorComoDouble(valorTexto.text)
+                            ?: return@Button
 
                         val lancamentoOriginal = lancamentoEmEdicao
 
@@ -182,7 +196,7 @@ fun ControleDespesasScreen(
                             // Cadastro de um novo lançamento.
                             viewModel.adicionarLancamento(
                                 Lancamento(
-                                    data = data,
+                                    data = data.text,
                                     valor = valor,
                                     tipo = tipoSelecionado
                                 )
@@ -191,7 +205,7 @@ fun ControleDespesasScreen(
                             // Mantém o ID original durante a edição.
                             viewModel.atualizarLancamento(
                                 lancamentoOriginal.copy(
-                                    data = data,
+                                    data = data.text,
                                     valor = valor,
                                     tipo = tipoSelecionado
                                 )
@@ -322,9 +336,101 @@ fun ControleDespesasScreen(
     }
 }
 
-// Aceita vírgula ou ponto como separador decimal.
+// Formata a data conforme os dígitos são digitados.
+private fun formatarData(valor: TextFieldValue): TextFieldValue {
+    val digitos = valor.text.filter(Char::isDigit).take(8)
+
+    val textoFormatado = buildString {
+        append(digitos.take(2))
+
+        if (digitos.length > 2) {
+            append('/')
+            append(digitos.drop(2).take(2))
+        }
+
+        if (digitos.length > 4) {
+            append('/')
+            append(digitos.drop(4).take(4))
+        }
+    }
+
+    return TextFieldValue(
+        text = textoFormatado,
+        selection = TextRange(
+            mapearCursorData(valor.text, valor.selection.start, textoFormatado),
+            mapearCursorData(valor.text, valor.selection.end, textoFormatado)
+        )
+    )
+}
+
+// Formata os dígitos como valor em reais, considerando os dois últimos como centavos.
+private fun formatarValor(valor: TextFieldValue): TextFieldValue {
+    val digitos = valor.text.filter(Char::isDigit).take(15)
+    val centavos = digitos.toLongOrNull() ?: return TextFieldValue("")
+    val textoFormatado = formatarValor(centavos / 100.0)
+
+    return TextFieldValue(
+        text = textoFormatado,
+        selection = TextRange(
+            mapearCursor(valor.text, valor.selection.start, textoFormatado),
+            mapearCursor(valor.text, valor.selection.end, textoFormatado)
+        )
+    )
+}
+
+private fun formatarValor(valor: Double): String {
+    val formatador = NumberFormat.getNumberInstance(Locale("pt", "BR")).apply {
+        minimumFractionDigits = 2
+        maximumFractionDigits = 2
+    }
+
+    return formatador.format(valor)
+}
+
+private fun mapearCursorData(
+    textoOriginal: String,
+    posicaoOriginal: Int,
+    textoFormatado: String
+): Int {
+    if (posicaoOriginal >= textoOriginal.length) return textoFormatado.length
+
+    val quantidadeDigitos = textoOriginal
+        .take(posicaoOriginal)
+        .count(Char::isDigit)
+
+    var posicao = quantidadeDigitos
+    if (textoFormatado.length > 2 && quantidadeDigitos >= 2) posicao++
+    if (textoFormatado.length > 5 && quantidadeDigitos >= 4) posicao++
+
+    return posicao.coerceAtMost(textoFormatado.length)
+}
+
+private fun mapearCursor(
+    textoOriginal: String,
+    posicaoOriginal: Int,
+    textoFormatado: String
+): Int {
+    if (posicaoOriginal >= textoOriginal.length) return textoFormatado.length
+
+    val quantidadeDigitos = textoOriginal
+        .take(posicaoOriginal)
+        .count(Char::isDigit)
+    if (quantidadeDigitos == 0) return 0
+
+    var digitosMapeados = 0
+    textoFormatado.forEachIndexed { index, caractere ->
+        if (caractere.isDigit()) {
+            digitosMapeados++
+            if (digitosMapeados == quantidadeDigitos) return index + 1
+        }
+    }
+
+    return textoFormatado.length
+}
+
+// Converte o valor formatado em reais para Double.
 private fun valorComoDouble(texto: String): Double? =
-    texto.replace(',', '.').toDoubleOrNull()
+    texto.replace(".", "").replace(',', '.').toDoubleOrNull()
 
 @Composable
 private fun TipoButton(
