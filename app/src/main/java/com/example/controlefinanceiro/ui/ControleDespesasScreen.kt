@@ -13,15 +13,23 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,14 +37,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.controlefinanceiro.R
 import com.example.controlefinanceiro.model.Lancamento
 import com.example.controlefinanceiro.model.TipoLancamento
 import com.example.controlefinanceiro.viewmodel.ControleDespesasViewModel
 import java.text.NumberFormat
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.time.format.ResolverStyle
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,8 +61,8 @@ import java.util.Locale
 fun ControleDespesasScreen(
     viewModel: ControleDespesasViewModel = viewModel()
 ) {
-    var data by remember { mutableStateOf("") }
-    var valorTexto by remember { mutableStateOf("") }
+    var data by remember { mutableStateOf(TextFieldValue("")) }
+    var valorTexto by remember { mutableStateOf(TextFieldValue("")) }
     var tipoSelecionado by remember {
         mutableStateOf(TipoLancamento.SAIDA)
     }
@@ -55,24 +72,39 @@ fun ControleDespesasScreen(
         mutableStateOf<Lancamento?>(null)
     }
 
+    var lancamentoParaExcluir by remember {
+        mutableStateOf<Lancamento?>(null)
+    }
+    var confirmarExclusaoTodos by remember { mutableStateOf(false) }
+    var mostrarCalendario by remember { mutableStateOf(false) }
+
     // A tela observa o estado publicado pela ViewModel.
     val estado by viewModel.uiState
     val lancamentos = estado.lancamentos
     val saldo = estado.saldo
+    val dataInformada = converterData(data.text)
+    val hoje = LocalDate.now()
 
     // Prepara o formulário para editar um lançamento existente.
     fun iniciarEdicao(lancamento: Lancamento) {
         lancamentoEmEdicao = lancamento
-        data = lancamento.data
-        valorTexto = lancamento.valor.toString()
+        data = TextFieldValue(
+            text = lancamento.data,
+            selection = TextRange(lancamento.data.length)
+        )
+        val valorFormatado = formatarValor(lancamento.valor)
+        valorTexto = TextFieldValue(
+            text = valorFormatado,
+            selection = TextRange(valorFormatado.length)
+        )
         tipoSelecionado = lancamento.tipo
     }
 
     // Limpa o formulário e sai do modo de edição.
     fun cancelarEdicao() {
         lancamentoEmEdicao = null
-        data = ""
-        valorTexto = ""
+        data = TextFieldValue("")
+        valorTexto = TextFieldValue("")
         tipoSelecionado = TipoLancamento.SAIDA
     }
 
@@ -107,8 +139,20 @@ fun ControleDespesasScreen(
             item {
                 OutlinedTextField(
                     value = data,
-                    onValueChange = { data = it },
+                    onValueChange = { data = formatarData(it) },
                     label = { Text("Data") },
+                    placeholder = { Text("dd/MM/aaaa") },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number
+                    ),
+                    trailingIcon = {
+                        IconButton(onClick = { mostrarCalendario = true }) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_calendar),
+                                contentDescription = "Selecionar data"
+                            )
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
@@ -117,12 +161,12 @@ fun ControleDespesasScreen(
             item {
                 OutlinedTextField(
                     value = valorTexto,
-                    onValueChange = { valorTexto = it },
                     label = { Text("Valor") },
                     prefix = { Text("R$ ") },
                     keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Decimal
+                        keyboardType = KeyboardType.Number
                     ),
+                    onValueChange = { valorTexto = formatarValor(it) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
@@ -162,12 +206,14 @@ fun ControleDespesasScreen(
             item {
                 Button(
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = data.isNotBlank() &&
-                            (valorComoDouble(valorTexto)?.let {
+                    enabled = dataInformada != null &&
+                            !dataInformada.isAfter(hoje) &&
+                            (valorComoDouble(valorTexto.text)?.let {
                                 it > 0.0
                             } == true),
                     onClick = {
-                        val valor = valorComoDouble(valorTexto) ?: return@Button
+                        val valor = valorComoDouble(valorTexto.text)
+                            ?: return@Button
 
                         val lancamentoOriginal = lancamentoEmEdicao
 
@@ -175,7 +221,7 @@ fun ControleDespesasScreen(
                             // Cadastro de um novo lançamento.
                             viewModel.adicionarLancamento(
                                 Lancamento(
-                                    data = data,
+                                    data = data.text,
                                     valor = valor,
                                     tipo = tipoSelecionado
                                 )
@@ -184,7 +230,7 @@ fun ControleDespesasScreen(
                             // Mantém o ID original durante a edição.
                             viewModel.atualizarLancamento(
                                 lancamentoOriginal.copy(
-                                    data = data,
+                                    data = data.text,
                                     valor = valor,
                                     tipo = tipoSelecionado
                                 )
@@ -222,11 +268,25 @@ fun ControleDespesasScreen(
             }
 
             item {
-                Text(
-                    text = "Lançamentos recentes",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Lançamentos recentes",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
+                    if (lancamentos.isNotEmpty()) {
+                        OutlinedButton(
+                            onClick = { confirmarExclusaoTodos = true }
+                        ) {
+                            Text("Excluir todos")
+                        }
+                    }
+                }
             }
 
             if (lancamentos.isEmpty()) {
@@ -240,17 +300,227 @@ fun ControleDespesasScreen(
                 ) { lancamento ->
                     LancamentoItem(
                         lancamento = lancamento,
-                        aoEditar = { iniciarEdicao(lancamento) }
+                        aoEditar = { iniciarEdicao(lancamento) },
+                        aoExcluir = { lancamentoParaExcluir = lancamento }
                     )
                 }
             }
         }
     }
+
+    lancamentoParaExcluir?.let { lancamento ->
+        AlertDialog(
+            onDismissRequest = { lancamentoParaExcluir = null },
+            title = { Text("Excluir lançamento?") },
+            text = { Text("O lançamento será removido permanentemente.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.excluirLancamento(lancamento.id)
+                        if (lancamentoEmEdicao?.id == lancamento.id) {
+                            cancelarEdicao()
+                        }
+                        lancamentoParaExcluir = null
+                    }
+                ) {
+                    Text("Excluir")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { lancamentoParaExcluir = null }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    if (confirmarExclusaoTodos) {
+        AlertDialog(
+            onDismissRequest = { confirmarExclusaoTodos = false },
+            title = { Text("Excluir todos os lançamentos?") },
+            text = {
+                Text("Todos os lançamentos serão removidos permanentemente.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.excluirTodosLancamentos()
+                        cancelarEdicao()
+                        confirmarExclusaoTodos = false
+                    }
+                ) {
+                    Text("Excluir todos")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmarExclusaoTodos = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    if (mostrarCalendario) {
+        val hojeUtcMillis = hoje.atStartOfDay(ZoneOffset.UTC)
+            .toInstant()
+            .toEpochMilli()
+        val dataSelecionadaMillis = dataInformada
+            ?.takeUnless { it.isAfter(hoje) }
+            ?.atStartOfDay(ZoneOffset.UTC)
+            ?.toInstant()
+            ?.toEpochMilli()
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = dataSelecionadaMillis,
+            initialDisplayedMonthMillis = dataSelecionadaMillis ?: hojeUtcMillis,
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    val data = Instant.ofEpochMilli(utcTimeMillis)
+                        .atZone(ZoneOffset.UTC)
+                        .toLocalDate()
+                    return !data.isAfter(hoje)
+                }
+
+                override fun isSelectableYear(year: Int): Boolean {
+                    return year <= hoje.year
+                }
+            }
+        )
+
+        DatePickerDialog(
+            onDismissRequest = { mostrarCalendario = false },
+            confirmButton = {
+                TextButton(
+                    enabled = datePickerState.selectedDateMillis != null,
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            val dataSelecionada = Instant.ofEpochMilli(millis)
+                                .atZone(ZoneOffset.UTC)
+                                .toLocalDate()
+                            val texto = dataSelecionada.format(formatoData)
+                            data = TextFieldValue(
+                                text = texto,
+                                selection = TextRange(texto.length)
+                            )
+                        }
+                        mostrarCalendario = false
+                    }
+                ) {
+                    Text("Confirmar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { mostrarCalendario = false }) {
+                    Text("Cancelar")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
 }
 
-// Aceita vírgula ou ponto como separador decimal.
+private val formatoData = DateTimeFormatter
+    .ofPattern("dd/MM/uuuu")
+    .withResolverStyle(ResolverStyle.STRICT)
+
+private fun converterData(texto: String): LocalDate? =
+    runCatching { LocalDate.parse(texto, formatoData) }.getOrNull()
+
+// Formata a data conforme os dígitos são digitados.
+private fun formatarData(valor: TextFieldValue): TextFieldValue {
+    val digitos = valor.text.filter(Char::isDigit).take(8)
+
+    val textoFormatado = buildString {
+        append(digitos.take(2))
+
+        if (digitos.length > 2) {
+            append('/')
+            append(digitos.drop(2).take(2))
+        }
+
+        if (digitos.length > 4) {
+            append('/')
+            append(digitos.drop(4).take(4))
+        }
+    }
+
+    return TextFieldValue(
+        text = textoFormatado,
+        selection = TextRange(
+            mapearCursorData(valor.text, valor.selection.start, textoFormatado),
+            mapearCursorData(valor.text, valor.selection.end, textoFormatado)
+        )
+    )
+}
+
+// Formata os dígitos como valor em reais, considerando os dois últimos como centavos.
+private fun formatarValor(valor: TextFieldValue): TextFieldValue {
+    val digitos = valor.text.filter(Char::isDigit).take(15)
+    val centavos = digitos.toLongOrNull() ?: return TextFieldValue("")
+    val textoFormatado = formatarValor(centavos / 100.0)
+
+    return TextFieldValue(
+        text = textoFormatado,
+        selection = TextRange(
+            mapearCursor(valor.text, valor.selection.start, textoFormatado),
+            mapearCursor(valor.text, valor.selection.end, textoFormatado)
+        )
+    )
+}
+
+private fun formatarValor(valor: Double): String {
+    val formatador = NumberFormat.getNumberInstance(Locale("pt", "BR")).apply {
+        minimumFractionDigits = 2
+        maximumFractionDigits = 2
+    }
+
+    return formatador.format(valor)
+}
+
+private fun mapearCursorData(
+    textoOriginal: String,
+    posicaoOriginal: Int,
+    textoFormatado: String
+): Int {
+    if (posicaoOriginal >= textoOriginal.length) return textoFormatado.length
+
+    val quantidadeDigitos = textoOriginal
+        .take(posicaoOriginal)
+        .count(Char::isDigit)
+
+    var posicao = quantidadeDigitos
+    if (textoFormatado.length > 2 && quantidadeDigitos >= 2) posicao++
+    if (textoFormatado.length > 5 && quantidadeDigitos >= 4) posicao++
+
+    return posicao.coerceAtMost(textoFormatado.length)
+}
+
+private fun mapearCursor(
+    textoOriginal: String,
+    posicaoOriginal: Int,
+    textoFormatado: String
+): Int {
+    if (posicaoOriginal >= textoOriginal.length) return textoFormatado.length
+
+    val quantidadeDigitos = textoOriginal
+        .take(posicaoOriginal)
+        .count(Char::isDigit)
+    if (quantidadeDigitos == 0) return 0
+
+    var digitosMapeados = 0
+    textoFormatado.forEachIndexed { index, caractere ->
+        if (caractere.isDigit()) {
+            digitosMapeados++
+            if (digitosMapeados == quantidadeDigitos) return index + 1
+        }
+    }
+
+    return textoFormatado.length
+}
+
+// Converte o valor formatado em reais para Double.
 private fun valorComoDouble(texto: String): Double? =
-    texto.replace(',', '.').toDoubleOrNull()
+    texto.replace(".", "").replace(',', '.').toDoubleOrNull()
 
 @Composable
 private fun TipoButton(
@@ -272,7 +542,8 @@ private fun TipoButton(
 @Composable
 private fun LancamentoItem(
     lancamento: Lancamento,
-    aoEditar: () -> Unit
+    aoEditar: () -> Unit,
+    aoExcluir: () -> Unit
 ) {
     val ehEntrada = lancamento.tipo == TipoLancamento.ENTRADA
 
@@ -306,8 +577,16 @@ private fun LancamentoItem(
 
                 Spacer(Modifier.height(4.dp))
 
-                OutlinedButton(onClick = aoEditar) {
-                    Text("Editar")
+                Row {
+                    OutlinedButton(onClick = aoEditar) {
+                        Text("Editar")
+                    }
+
+                    Spacer(Modifier.width(8.dp))
+
+                    OutlinedButton(onClick = aoExcluir) {
+                        Text("Excluir")
+                    }
                 }
             }
 

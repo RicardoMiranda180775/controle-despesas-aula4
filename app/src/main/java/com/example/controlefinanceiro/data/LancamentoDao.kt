@@ -25,5 +25,9 @@ interface LancamentoDao {
 
     // Exclui um lançamento específico pelo ID.
     @Query("DELETE FROM lancamentos WHERE id = :id")
-    suspend fun excluirPorId(id: String)
+    suspend fun excluirPorId(id: String): Int
+
+    // Exclui todos os lançamentos.
+    @Query("DELETE FROM lancamentos")
+    suspend fun excluirTodos()
 }
